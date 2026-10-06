@@ -496,6 +496,7 @@ function Invoke-SchedulerTick {
     } catch {
         Write-Log ("스케줄러 오류: " + $_.Exception.Message)
     } finally {
+        $script:S.LastTick = Get-Date   # 매크로 실행 시간은 멈춤으로 보지 않음
         $script:Busy = $false
     }
 }
@@ -792,6 +793,7 @@ function Show-Gui {
             [void](Invoke-Macro $m)
             Write-Log '  테스트 끝'
         } finally {
+            $script:S.LastTick = Get-Date   # 매크로 실행 시간은 멈춤으로 보지 않음
             $script:Busy = $false
             $form.WindowState = 'Normal'
             $form.Activate()
