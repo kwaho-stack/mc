@@ -45,6 +45,8 @@ function Reset-State {
         LastSkipped = $false  # 직전 판정이 "확률 미작동" 이었는지
         ForceEarly  = $false  # 다음 시간을 0~10분 사이에 실행해야 하는지
         LastMacro   = ''      # 마지막으로 실행한 매크로
+        LastTick    = $null   # 마지막 타이머 동작 시각 (절전/멈춤 감지용)
+        BeatKey     = ''      # 10분마다 남기는 "대기 중" 로그용
     }
 }
 Reset-State
@@ -80,10 +82,11 @@ public static class HumanMouse
         try { SetProcessDPIAware(); } catch { }
     }
 
-    // 실행 중 PC 절전 방지
+    // 실행 중 PC 절전 / 화면 꺼짐 방지
+    // (모던 스탠바이 PC는 화면이 꺼지면 프로그램이 멈추므로 화면까지 켜둠)
     public static void KeepAwake(bool on)
     {
-        try { SetThreadExecutionState(on ? 0x80000001u : 0x80000000u); } catch { }
+        try { SetThreadExecutionState(on ? 0x80000003u : 0x80000000u); } catch { }
     }
 
     public static bool IsKeyDown(int vk)
@@ -444,10 +447,31 @@ function Invoke-SchedulerTick {
     $script:Busy = $true
     try {
         $now = Get-Date
-        if ($now.ToString('yyyyMMddHH') -ne $script:S.HourKey) { New-HourPlan $now }
-        if (-not $script:S.Done -and $script:S.PlanTime -and $now -ge $script:S.PlanTime) {
-            $script:S.Done = $true
+        $S = $script:S
+        if ($S.LastTick -and ($now - $S.LastTick).TotalSeconds -gt 90) {
+            Write-Log ('경고: {0:HH:mm:ss} ~ {1:HH:mm:ss} 동안 프로그램이 멈춰 있었음 (PC 절전/화면 꺼짐/일시정지 등)' -f $S.LastTick, $now)
+        }
+        $S.LastTick = $now
+
+        if ($now.ToString('yyyyMMddHH') -ne $S.HourKey) {
+            if ($S.HourKey -and -not $S.Done -and $S.PlanTime) {
+                Write-Log ('[{0:D2}시] 예정 시각 {1:HH:mm:ss}에 실행하지 못하고 시간이 지나감' -f $S.PlanTime.Hour, $S.PlanTime)
+            }
+            New-HourPlan $now
+        }
+
+        if (-not $S.Done -and $S.PlanTime -and $now -ge $S.PlanTime) {
+            $S.Done = $true
+            $late = ($now - $S.PlanTime).TotalSeconds
+            if ($late -gt 60) { Write-Log ('  예정 {0:HH:mm:ss}보다 {1}초 늦게 실행' -f $S.PlanTime, [int]$late) }
             Invoke-PlannedRun
+        }
+
+        # 살아 있는지 확인할 수 있도록 10분마다 기록
+        $beat = '{0}{1}' -f $now.ToString('yyyyMMddHH'), [int][Math]::Floor($now.Minute / 10)
+        if ($beat -ne $S.BeatKey) {
+            if ($S.BeatKey -and $now.Minute % 10 -eq 0) { Write-Log ('대기 중 · ' + ((Get-StatusText) -replace '^실행 중 · ', '')) }
+            $S.BeatKey = $beat
         }
     } catch {
         Write-Log ("스케줄러 오류: " + $_.Exception.Message)
@@ -783,6 +807,7 @@ function Show-Gui {
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval = 300
     $timer.Add_Tick({
+      try {
         if ($chkCap.Checked) {
             $down = [HumanMouse]::IsKeyDown(0x77)   # F8
             if ($down -and -not $script:F8Prev) {
@@ -799,6 +824,9 @@ function Show-Gui {
             Invoke-SchedulerTick
             $lblStatus.Text = Get-StatusText
         }
+      } catch {
+        Write-Log ('타이머 오류: ' + $_.Exception.Message)
+      }
     })
 
     $form.Add_FormClosing({
