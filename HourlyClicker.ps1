@@ -89,6 +89,26 @@ public static class HumanMouse
         try { SetThreadExecutionState(on ? 0x80000003u : 0x80000000u); } catch { }
     }
 
+    [DllImport("kernel32.dll")] static extern IntPtr GetStdHandle(int n);
+    [DllImport("kernel32.dll")] static extern bool GetConsoleMode(IntPtr h, out uint mode);
+    [DllImport("kernel32.dll")] static extern bool SetConsoleMode(IntPtr h, uint mode);
+
+    // 콘솔 '빠른 편집 모드' 끄기: 켜져 있으면 콘솔 창을 클릭(텍스트 선택)하는 순간
+    // 프로그램이 다음 출력에서 멈춰 버림
+    public static bool DisableQuickEdit()
+    {
+        try
+        {
+            IntPtr h = GetStdHandle(-10);
+            uint mode;
+            if (!GetConsoleMode(h, out mode)) return false;
+            mode &= ~0x0040u;   // ENABLE_QUICK_EDIT_MODE
+            mode |= 0x0080u;    // ENABLE_EXTENDED_FLAGS
+            return SetConsoleMode(h, mode);
+        }
+        catch { return false; }
+    }
+
     public static bool IsKeyDown(int vk)
     {
         return (GetAsyncKeyState(vk) & 0x8000) != 0;
@@ -207,15 +227,15 @@ public static class HumanMouse
 # ---------------------------------------------------------------------------
 function Write-Log([string]$msg) {
     $line = '[{0}] [프로필{1}] {2}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $script:ProfileNo, $msg
+    try {
+        $file = Join-Path $script:LogDir ((Get-Date -Format 'yyyyMMdd') + '.log')
+        Add-Content -Path $file -Value $line -Encoding UTF8
+    } catch { }
     if ($script:LogBox) {
         $script:LogBox.AppendText($line + "`r`n")
     } else {
         Write-Host $line
     }
-    try {
-        $file = Join-Path $script:LogDir ((Get-Date -Format 'yyyyMMdd') + '.log')
-        Add-Content -Path $file -Value $line -Encoding UTF8
-    } catch { }
 }
 
 function ConvertTo-IntOr($v, [int]$default) {
@@ -493,11 +513,14 @@ function Get-StatusText {
 #  콘솔 실행 모드
 # ---------------------------------------------------------------------------
 function Start-ConsoleRun {
+    [void][HumanMouse]::DisableQuickEdit()
     Import-ProfileData $script:ProfileNo
     $enabled = @($script:Data.Hours | Where-Object { $_.Enabled -and (Get-StepCount $_.Macro) -gt 0 }).Count
     Write-Host ''
     Write-Host ("  프로필{0} 실행 (사용 시간 {1}개). 종료: Ctrl+C, 매크로 중단: F12" -f $script:ProfileNo, $enabled)
+    Write-Host '  ※ 이 창을 닫으면 멈춥니다. 최소화해 두세요.'
     Write-Host ''
+    Write-Log ("스케줄 시작 (콘솔, 사용 시간 {0}개)" -f $enabled)
     if ($enabled -eq 0) { Write-Log '사용 중인 시간이 없습니다. GUI에서 먼저 설정하세요.' }
     Reset-State
     $script:Running = $true
