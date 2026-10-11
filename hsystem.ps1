@@ -1,5 +1,5 @@
 ﻿<#
-    시간별 랜덤 클릭 스케줄러 (HourlyClicker)
+    시간별 랜덤 클릭 스케줄러 (hsystem)
 
     - 매 시간, 그 시간에 지정한 분(分) 범위 안의 랜덤한 시각에 매크로를 한 번 실행
     - 마우스는 베지어 곡선 + 가감속 + 미세 떨림 + 가끔 오버슈트로 사람처럼 이동
@@ -9,8 +9,8 @@
     - 어떤 시간에 50분 이후에 작업했다면, 다음 시간은 0~10분 사이에 작업
 
     사용법
-      GUI(설정/실행) : HourlyClicker.ps1
-      콘솔 실행      : HourlyClicker.ps1 -Run -ProfileNo 1
+      GUI(설정/실행) : hsystem.ps1
+      콘솔 실행      : hsystem.ps1 -Run -ProfileNo 1
 #>
 param(
     [switch]$Run,

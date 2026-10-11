@@ -1,4 +1,4 @@
-# 시간별 랜덤 클릭 스케줄러 (HourlyClicker)
+# 시간별 랜덤 클릭 스케줄러 (hsystem)
 
 매 시간, 정해 둔 분(分) 범위 안의 랜덤한 시각에 클릭 매크로를 **한 번** 실행합니다.
 마우스는 순간이동하지 않고 사람처럼 곡선을 그리며 움직입니다.
@@ -10,7 +10,7 @@
 | `start_gui.bat` | 설정 창 열기 (편집, 저장, 테스트, 실행) |
 | `run_profile1.bat` | 프로필1을 콘솔 창에서 바로 실행 |
 | `run_profile2.bat` | 프로필2를 콘솔 창에서 바로 실행 |
-| `HourlyClicker.ps1` | 본체 (PowerShell 5.1, Windows 기본 탑재) |
+| `hsystem.ps1` | 본체 (PowerShell 5.1, Windows 기본 탑재) |
 | `profiles\profile1.json`, `profile2.json` | 저장된 설정 (처음 저장할 때 생성) |
 | `logs\yyyyMMdd.log` | 실행 기록 |
 
