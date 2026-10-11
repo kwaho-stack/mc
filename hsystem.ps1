@@ -544,7 +544,7 @@ function Show-Gui {
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = '시간별 랜덤 클릭 스케줄러'
+    $form.Text = 'hsystem 스케줄러'
     $form.ClientSize = New-Object System.Drawing.Size(1050, 720)
     $form.StartPosition = 'CenterScreen'
     $form.FormBorderStyle = 'FixedSingle'
