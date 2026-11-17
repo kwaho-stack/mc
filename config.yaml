@@ -1,0 +1,94 @@
+# ─────────────────────────────────────────────────────────────
+#  인줌 강의 녹화기 설정
+#  값을 바꾼 뒤 저장하고 start.bat 을 다시 실행하면 적용됩니다.
+# ─────────────────────────────────────────────────────────────
+
+# 강의 목록 페이지 (로그인 후 차시 목록이 보이는 페이지)
+list_url: https://edu.inzeum.com/classRoom/goContentsList
+
+# 녹화 파일을 모아둘 폴더
+output_dir: ./recordings
+
+browser:
+  # launch : 프로그램 전용 크롬 창을 띄움 (처음 한 번 그 창에서 로그인하면 계속 유지)
+  # cdp    : 이미 켜둔 크롬에 연결 (README '크롬 직접 연결' 참고)
+  mode: launch
+  profile_dir: ./chrome-profile
+  cdp_url: http://127.0.0.1:9222
+
+lessons:
+  # 사이트에서 이미 '완료'로 표시된 차시를 건너뛸지 (시작할 때 다시 물어봄)
+  skip_completed: true
+  # 시작할 때 차시 목록을 보여주고 건너뛰기/범위를 확인할지
+  ask_on_start: true
+  # 차시마다 있는 재생 버튼 글자 (여러 개 가능)
+  study_button_texts: ["학습하기", "복습하기", "다시보기"]
+  # 차시 줄에 이 글자가 있으면 '완료'로 판단 (정규식)
+  #   (?<!미)완료 → '완료'는 잡고 '미완료'는 잡지 않음
+  completed_patterns: ["(?<!미)완료", "\\b100\\s*%"]
+  # 자동 인식이 안 될 때만 직접 지정 (CSS 선택자, 비워두면 자동)
+  row_selector: ""
+  title_selector: ""
+
+player:
+  # Kollus 재생창 찾기: 프로세스 이름 또는 창 제목에 이 글자가 들어가면 재생창으로 봄 (대소문자 무시)
+  process_names: ["kollus"]
+  window_title_patterns: ["kollus"]
+  # 위 조건에 맞아도 재생창이 아닌 프로그램 (크롬, OBS 등)
+  exclude_processes: ["chrome.exe", "msedge.exe", "whale.exe", "obs64.exe", "python.exe",
+                      "pythonw.exe", "py.exe", "explorer.exe", "cmd.exe", "windowsterminal.exe",
+                      "snippingtool.exe"]
+  # 학습하기를 누른 뒤 재생창이 뜰 때까지 기다리는 최대 시간(초)
+  appear_timeout_sec: 90
+  # 재생창이 뜬 뒤 화면 크기:
+  #   key         : fullscreen_key 를 눌러 전체화면 (기본: F11)
+  #   maximize    : 창 최대화만
+  #   doubleclick : 영상 가운데를 더블클릭해 전체화면
+  #   none        : 그대로
+  window_mode: key
+  fullscreen_key: F11
+  # 재생창이 뜬 뒤 F11 을 누르기 전에 기다리는 시간(초)
+  fullscreen_delay_sec: 2
+  # 한 차시 최대 녹화 시간(분). 넘으면 강제로 마무리
+  max_minutes_per_lesson: 240
+  # 끝난 뒤 재생창이 스스로 닫히길 기다리는 시간(초). 지나면 프로그램이 닫음
+  close_wait_sec: 15
+  # 그래도 안 닫히면 재생기 프로세스를 강제 종료할지
+  kill_if_stuck: true
+  # 재생 중 뜨는 알림창 처리 규칙 (위에서부터 먼저 맞는 규칙 하나만 적용)
+  #   match  : 알림창 글자에서 찾을 정규식
+  #   click  : 누를 버튼 이름 후보 (앞에서부터 찾음)
+  #   action : end   → 차시 종료로 보고 녹화를 마침
+  #            error → 녹화 프로그램 감지 등으로 재생 불가, 전체 중단
+  dialogs:
+    - match: "-1015|-1002|\\b1002\\b|캡[처쳐]|녹화\\s*프로그램|다른 곳에서 재생"
+      action: error
+    - match: "이어\\s*보|이어서|이전.*위치|마지막.*위치"
+      click: ["아니오", "아니요", "처음부터", "No"]
+    - match: "종료하시겠|닫으시겠"
+      click: ["예", "확인", "Yes", "OK"]
+    - match: "종료|완료"
+      click: ["확인", "OK", "예"]
+      action: end
+
+recorder:
+  # obs      : OBS Studio 로 녹화 (권장)
+  # snipping : 윈도우 캡처 도구(Win+Shift+R) 로 녹화 (실험적)
+  type: obs
+  # false : 재생창이 뜨고 F11 전체화면이 된 뒤 녹화 시작 (기본, 깔끔함. 맨 앞 몇 초가 빠질 수 있음)
+  # true  : 학습하기를 누르기 직전에 녹화 시작 (앞부분이 안 빠지지만 크롬 화면이 잠깐 찍힘)
+  start_before_click: false
+  # 차시가 끝난 뒤 녹화를 멈추기 전에 더 기다릴 시간(초)
+  tail_sec: 2
+  obs:
+    host: localhost
+    port: 4455
+    password: ""
+    # OBS 가 꺼져 있으면 이 경로로 자동 실행 (비우면 자동 실행 안 함)
+    launch_path: C:\Program Files\obs-studio\bin\64bit\obs64.exe
+  snipping:
+    # 캡처 도구가 녹화를 자동 저장하는 폴더 (비우면 %USERPROFILE%\Videos\Screen Recordings)
+    save_dir: ""
+
+# 차시와 차시 사이 쉬는 시간(초)
+between_lessons_sec: 5

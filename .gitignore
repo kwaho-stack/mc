@@ -1,1 +1,6 @@
 logs/
+recordings/
+chrome-profile/
+probe/
+__pycache__/
+*.pyc
