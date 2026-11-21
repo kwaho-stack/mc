@@ -9,7 +9,7 @@ from pathlib import Path
 _BAD = re.compile(r'[\\/:*?"<>|\r\n\t]+')
 
 
-def safe_name(text: str, limit: int = 80) -> str:
+def safe_name(text: str, limit: int = 120) -> str:
     text = _BAD.sub(" ", text)
     text = re.sub(r"\s+", " ", text).strip(" .")
     return text[:limit].rstrip(" .") or "untitled"

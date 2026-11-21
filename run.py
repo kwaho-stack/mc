@@ -49,12 +49,17 @@ def parse_range(text: str, maximum: int) -> set[int]:
 
 def print_lessons(lessons, progress) -> None:
     print()
-    print(" 번호  사이트   녹화     제목")
-    print(" ────  ──────  ──────  ───────────────────────────")
+    print(" 번호  사이트  녹화   시청시간    제목")
+    section = None
     for l in lessons:
+        if l.section != section:
+            section = l.section
+            print(f"\n ■ {section or '(주차 없음)'}")
         site = "완료" if l.completed else "-"
-        mine = "완료" if progress.is_done(l.key) else ("실패" if progress.data.get(l.key, {}).get("status") == "failed" else "-")
-        print(f" {l.number:>4}  {site:<6}  {mine:<6}  {l.title}")
+        st = progress.data.get(l.key, {}).get("status")
+        mine = {"done": "완료", "failed": "실패"}.get(st, "-")
+        tm = f"{l.watched}/{l.total}분" if l.total else ""
+        print(f" {l.number:>4}  {site:<4}  {mine:<4}  {tm:<10}  {l.title}")
     print()
 
 
@@ -91,7 +96,7 @@ def choose(lessons, progress, cfg, args) -> list:
 
     print(f"\n녹화 대상 {len(targets)}개 (완료 차시 {'건너뜀' if skip_completed else '포함'})")
     for l in targets:
-        print(f"  {l.number:>3}. {l.title}")
+        print(f"  {l.number:>3}. {l.full_title}")
     if targets and ask:
         print("\n※ 녹화가 진행되는 동안 마우스와 키보드를 건드리지 마세요.")
         input("시작하려면 Enter (취소: Ctrl+C) > ")
@@ -107,7 +112,8 @@ def probe_player(br, cfg, lessons, number: int) -> None:
         print(f"{number}번 차시가 없습니다.")
         return
     before = {w.hwnd for w in winutil.list_windows()}
-    print(f"\n'{lesson.title}' 을(를) 녹화 없이 엽니다. 90초 동안 새로 뜨는 창을 기록합니다.")
+    lesson = br.locate(lesson) or lesson
+    print(f"\n'{lesson.full_title}' 을(를) 녹화 없이 엽니다. 90초 동안 새로 뜨는 창을 기록합니다.")
     br.click(lesson)
     player = KollusPlayer(cfg.get("player", {}))
     seen: set[int] = set()
@@ -164,7 +170,7 @@ def main() -> int:
             print_lessons(lessons, progress)
             if args.probe:
                 for l in lessons:
-                    print(f"[{l.number}] 버튼='{l.button}' 완료={l.completed}\n     줄 글자: {l.row_text[:200]}")
+                    print(f"[{l.number}] 버튼='{l.button}' 완료={l.completed}({l.how})\n     줄 글자: {l.row_text[:200]}")
                 for p in br.dump_html(ROOT / "probe"):
                     print("HTML 저장:", p)
             return 0

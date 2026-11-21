@@ -23,9 +23,22 @@ lessons:
   ask_on_start: true
   # 차시마다 있는 재생 버튼 글자 (여러 개 가능)
   study_button_texts: ["학습하기", "복습하기", "다시보기"]
-  # 차시 줄에 이 글자가 있으면 '완료'로 판단 (정규식)
-  #   (?<!미)완료 → '완료'는 잡고 '미완료'는 잡지 않음
+  # 주차 제목 찾기 (정규식). 접힌 주차는 프로그램이 하나씩 눌러서 펼침
+  section_pattern: "\\(\\s*\\d+\\s*주차\\s*\\)"
+  section_selector: ""          # 직접 지정할 때만 (CSS 선택자)
+  section_open_timeout_sec: 6   # 주차를 누른 뒤 차시가 나타날 때까지 기다리는 시간
+
+  # ── 완료 차시 판단 (위에서부터 먼저 쓸 수 있는 방법 하나로 판단) ──
+  # 1) completed_selector : 차시 줄 안에 이 CSS 선택자가 있으면 완료 (직접 지정할 때만)
+  # 2) 아이콘 자동 학습   : '57분 / 57분'처럼 다 본 차시와 '0분 / 30분' 차시를 비교해
+  #                         체크 아이콘 모양을 스스로 배움 (자동)
+  # 3) completed_patterns : 차시 줄에 이 글자가 있으면 완료 ((?<!미)완료 = '미완료'는 제외)
+  # 4) 시청시간           : 본 시간 ≥ 전체 시간 × completed_time_ratio 이면 완료
+  completed_selector: ""
   completed_patterns: ["(?<!미)완료", "\\b100\\s*%"]
+  time_pattern: "(\\d+)\\s*분\\s*/\\s*(\\d+)\\s*분"
+  completed_time_ratio: 0.9
+
   # 자동 인식이 안 될 때만 직접 지정 (CSS 선택자, 비워두면 자동)
   row_selector: ""
   title_selector: ""

@@ -68,24 +68,27 @@ def run_all(targets: list[Lesson], br: Browser, rec, cfg, progress: Progress) ->
     result = {"done": [], "failed": []}
 
     for i, target in enumerate(targets, 1):
-        log.info("━━━ [%d/%d] %03d. %s ━━━", i, len(targets), target.number, target.title)
+        name = target.full_title
+        log.info("━━━ [%d/%d] %03d. %s ━━━", i, len(targets), target.number, name)
         attempt = 0
         while True:
             attempt += 1
-            # 목록을 새로 읽어서 같은 차시를 다시 찾는다 (페이지가 바뀌었을 수 있음)
-            lessons = br.refresh()
-            lesson = next((l for l in lessons if l.key == target.key), None)
+            # 목록을 새로 열고 해당 주차를 펼쳐서 같은 차시를 다시 찾는다
+            lesson = br.locate(target)
             if lesson is None:
-                log.error("목록에서 '%s' 차시를 찾지 못해 건너뜁니다", target.title)
-                result["failed"].append(target.title)
-                progress.mark(target.key, "failed", reason="목록에서 사라짐")
-                break
+                log.error("목록에서 '%s' 차시를 찾지 못했습니다", name)
+                if attempt >= 2:
+                    result["failed"].append(name)
+                    progress.mark(target.key, "failed", reason="목록에서 찾지 못함")
+                    break
+                time.sleep(5)
+                continue
             try:
                 path, outcome = record_lesson(lesson, br, player, rec, cfg)
-                dst = move_recording(path, out_dir, target.number, target.title)
+                dst = move_recording(path, out_dir, target.number, name)
                 progress.mark(target.key, "done", file=str(dst), outcome=outcome)
                 log.info("저장: %s", dst)
-                result["done"].append(target.title)
+                result["done"].append(name)
                 break
             except PlaybackBlocked:
                 raise
@@ -93,7 +96,7 @@ def run_all(targets: list[Lesson], br: Browser, rec, cfg, progress: Progress) ->
                 log.error("실패 (%d번째 시도): %s", attempt, e)
                 if attempt >= 2:
                     progress.mark(target.key, "failed", reason=str(e)[:300])
-                    result["failed"].append(target.title)
+                    result["failed"].append(name)
                     break
                 time.sleep(5)
         if i < len(targets):
