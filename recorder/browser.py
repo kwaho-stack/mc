@@ -174,6 +174,11 @@ class Browser:
         self._pw = None
         self.context = None
         self.page = None
+        self.events: list[tuple[str, str]] = []
+        self.dialog_rules = [
+            {**r, "_re": re.compile(r.get("match", ".*"))}
+            for r in cfg.get("player", {}).get("dialogs", [])
+        ]
 
     # ── 시작 / 종료 ──────────────────────────────────────────
     def __enter__(self):
@@ -211,16 +216,32 @@ class Browser:
             if self._pw:
                 self._pw.stop()
 
-    @staticmethod
-    def _watch_page(page):
-        def on_dialog(d):
-            log.info("웹 알림창: %s → 확인", d.message.replace("\n", " "))
-            try:
-                d.accept()
-            except Exception:
-                pass
+    def _watch_page(self, page):
+        page.on("dialog", self._on_dialog)
 
-        page.on("dialog", on_dialog)
+    def _on_dialog(self, d) -> None:
+        """웹 알림창(alert/confirm)을 규칙대로 처리하고, 종료/오류 신호를 기록한다."""
+        msg = (d.message or "").replace("\n", " ").strip()
+        rule = next((r for r in self.dialog_rules if r["_re"].search(msg)), {})
+        answer = rule.get("answer", "accept")
+        action = rule.get("action", "")
+        log.info("웹 알림창: %s → %s", msg, "확인" if answer == "accept" else "취소")
+        self.events.append((action, msg))
+        try:
+            d.accept() if answer == "accept" else d.dismiss()
+        except Exception:
+            pass
+
+    def take_events(self) -> list[tuple[str, str]]:
+        ev, self.events = self.events, []
+        return ev
+
+    def wait(self, ms: int) -> None:
+        """기다리는 동안에도 알림창 등 브라우저 이벤트가 처리되도록 한다 (time.sleep 대신 사용)."""
+        try:
+            self.page.wait_for_timeout(ms)
+        except Exception:
+            time.sleep(ms / 1000)
 
     # ── 페이지 읽기 ──────────────────────────────────────────
     def open_list(self) -> None:

@@ -44,45 +44,43 @@ lessons:
   title_selector: ""
 
 player:
-  # Kollus 재생창 찾기: 프로세스 이름 또는 창 제목에 이 글자가 들어가면 재생창으로 봄 (대소문자 무시)
-  process_names: ["kollus"]
-  window_title_patterns: ["kollus"]
-  # 위 조건에 맞아도 재생창이 아닌 프로그램 (크롬, OBS 등)
-  exclude_processes: ["chrome.exe", "msedge.exe", "whale.exe", "obs64.exe", "python.exe",
-                      "pythonw.exe", "py.exe", "explorer.exe", "cmd.exe", "windowsterminal.exe",
-                      "snippingtool.exe"]
-  # 학습하기를 누른 뒤 재생창이 뜰 때까지 기다리는 최대 시간(초)
-  appear_timeout_sec: 90
-  # 재생창이 뜬 뒤 화면 크기:
-  #   key         : fullscreen_key 를 눌러 전체화면 (기본: F11)
-  #   maximize    : 창 최대화만
-  #   doubleclick : 영상 가운데를 더블클릭해 전체화면
-  #   none        : 그대로
-  window_mode: key
-  fullscreen_key: F11
-  # 재생창이 뜬 뒤 F11 을 누르기 전에 기다리는 시간(초)
-  fullscreen_delay_sec: 2
+  # 학습하기를 누르면 크롬 새 창(재생 창)이 열립니다.
+  # 재생 창이 열릴 때까지 기다리는 최대 시간(초)
+  appear_timeout_sec: 30
+  # 재생 창이 열린 뒤 화면 크기
+  #   f11      : F11 과 같은 크롬 전체화면 (기본)
+  #   maximize : 창 최대화만
+  #   none     : 그대로
+  window_mode: f11
+  # 전체화면 뒤 "F11 키를 눌러 종료" 안내가 사라질 때까지 기다린 뒤 녹화 시작(초)
+  fullscreen_settle_sec: 4
+  # 녹화를 켠 뒤 재생 창에서 누를 시작 버튼 글자 (앞에서부터 찾음)
+  start_button_texts: ["시작", "학습시작", "강의시작", "재생"]
+  # 시작 버튼을 찾는 최대 시간(초). 못 찾으면 자동 재생으로 보고 계속 진행
+  start_button_timeout_sec: 20
   # 한 차시 최대 녹화 시간(분). 넘으면 강제로 마무리
   max_minutes_per_lesson: 240
-  # 끝난 뒤 재생창이 스스로 닫히길 기다리는 시간(초). 지나면 프로그램이 닫음
-  close_wait_sec: 15
-  # 그래도 안 닫히면 재생기 프로세스를 강제 종료할지
-  kill_if_stuck: true
-  # 재생 중 뜨는 알림창 처리 규칙 (위에서부터 먼저 맞는 규칙 하나만 적용)
+  # 영상 요소의 '재생 끝남'도 종료로 볼지 (알림창이 안 뜨는 경우 대비)
+  end_on_video_ended: true
+
+  # 웹 알림창(확인/취소 창) 처리 규칙 — 위에서부터 먼저 맞는 규칙 하나만 적용
   #   match  : 알림창 글자에서 찾을 정규식
-  #   click  : 누를 버튼 이름 후보 (앞에서부터 찾음)
-  #   action : end   → 차시 종료로 보고 녹화를 마침
-  #            error → 녹화 프로그램 감지 등으로 재생 불가, 전체 중단
+  #   answer : accept = [확인],  dismiss = [취소]
+  #   action : end   → 차시가 끝난 것으로 보고 녹화를 마침
+  #            error → 녹화 프로그램 감지 등으로 재생 불가 → 전체 중단
   dialogs:
-    - match: "-1015|-1002|\\b1002\\b|캡[처쳐]|녹화\\s*프로그램|다른 곳에서 재생"
+    - match: "-1015|-1002|\\b1002\\b|캡[처쳐]\\s*프로그램|녹화\\s*프로그램|다른 곳에서 재생"
+      answer: accept
       action: error
-    - match: "이어\\s*보|이어서|이전.*위치|마지막.*위치"
-      click: ["아니오", "아니요", "처음부터", "No"]
-    - match: "종료하시겠|닫으시겠"
-      click: ["예", "확인", "Yes", "OK"]
-    - match: "종료|완료"
-      click: ["확인", "OK", "예"]
+    # 예: "강의영상이 완료 되었습니다. 창을 닫으시겠습니까?" → 확인 → 녹화 끝
+    - match: "완료|종료|닫으시겠"
+      answer: accept
       action: end
+    # 이어보기 질문 → 취소 (처음부터 녹화). 이어서 보려면 accept 로 바꾸세요
+    - match: "이어\\s*보|이어서|이전.*위치|마지막.*위치"
+      answer: dismiss
+    - match: ".*"
+      answer: accept
 
 recorder:
   # obs      : OBS Studio 로 녹화 (권장)

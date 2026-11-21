@@ -7,7 +7,7 @@
   python run.py --include-completed / --skip-completed
   python run.py --redo             이미 녹화한 차시도 다시 녹화
   python run.py --probe            목록 인식 결과와 페이지 HTML 저장 (문제 확인용)
-  python run.py --probe-player 3   3번 차시를 녹화 없이 열어 재생창/알림창 정보 출력
+  python run.py --probe-player 3   3번 차시를 녹화 없이 열어 재생 창 구조 확인
 """
 from __future__ import annotations
 
@@ -104,33 +104,39 @@ def choose(lessons, progress, cfg, args) -> list:
 
 
 def probe_player(br, cfg, lessons, number: int) -> None:
-    from recorder import winutil
-    from recorder.player import KollusPlayer, dialog_texts
+    """녹화 없이 재생 창을 열어 구조를 확인하고 probe 폴더에 저장한다."""
+    from recorder.webplayer import START_JS, WebPlayer
 
     lesson = next((l for l in lessons if l.number == number), None)
     if not lesson:
         print(f"{number}번 차시가 없습니다.")
         return
-    before = {w.hwnd for w in winutil.list_windows()}
     lesson = br.locate(lesson) or lesson
-    print(f"\n'{lesson.full_title}' 을(를) 녹화 없이 엽니다. 90초 동안 새로 뜨는 창을 기록합니다.")
+    print(f"\n'{lesson.full_title}' 을(를) 녹화 없이 엽니다.")
+    wp = WebPlayer(br, cfg.get("player", {}))
+    before = br.pages()
     br.click(lesson)
-    player = KollusPlayer(cfg.get("player", {}))
-    seen: set[int] = set()
-    end = time.time() + 90
-    while time.time() < end:
-        for w in winutil.list_windows():
-            if w.hwnd in before or w.hwnd in seen or w.area == 0:
-                continue
-            seen.add(w.hwnd)
-            tag = "★재생창 후보" if player._match(w) else ""
-            print(f"  새 창: {w} {tag}")
-            if w.area < 900 * 700:
-                text, buttons = dialog_texts(w.hwnd)
-                print(f"     글자: {text[:200]}")
-                print(f"     버튼: {[b.window_text() for b in buttons]}")
-        time.sleep(1)
-    print("\n★ 표시가 없다면 config.yaml 의 player.process_names 에 위 프로세스 이름을 넣어 주세요.")
+    page = wp.wait_open(before, br.list_url)
+    if page is None:
+        print("재생 창이 열리지 않았습니다.")
+        return
+    print("재생 창 주소:", page.url, "(같은 탭)" if wp.same_tab else "(새 창)")
+    folder = ROOT / "probe"
+    folder.mkdir(exist_ok=True)
+    br.wait(3000)
+    texts = cfg.get("player", {}).get("start_button_texts") or ["시작"]
+    for i, frame in enumerate(page.frames):
+        try:
+            found = frame.evaluate(START_JS, texts)
+            vids = frame.evaluate("() => document.querySelectorAll('video').length")
+            (folder / f"player_frame{i}.html").write_text(f"<!-- {frame.url} -->\n{frame.content()}", encoding="utf-8")
+        except Exception as e:
+            print(f"  frame{i} {frame.url} 읽기 실패: {e}")
+            continue
+        print(f"  frame{i} {frame.url}\n     시작 버튼: {found}  / 영상 요소: {vids}개")
+    print("probe 폴더에 player_frame*.html 저장. 10초 뒤 창을 닫습니다.")
+    br.wait(10000)
+    wp.close(page)
 
 
 def main() -> int:
@@ -144,7 +150,7 @@ def main() -> int:
     ap.add_argument("--redo", action="store_true", help="이미 녹화한 차시도 다시")
     ap.add_argument("-y", "--yes", action="store_true", help="묻지 않고 바로 시작")
     ap.add_argument("--probe", action="store_true", help="목록 인식 결과와 HTML 저장")
-    ap.add_argument("--probe-player", type=int, metavar="N", help="N번 차시를 녹화 없이 열어 창 정보 출력")
+    ap.add_argument("--probe-player", type=int, metavar="N", help="N번 차시를 녹화 없이 열어 재생 창 구조 확인")
     args = ap.parse_args()
 
     setup_logging()
@@ -155,7 +161,7 @@ def main() -> int:
     from recorder.browser import Browser
     from recorder.capture import RecorderError, make_recorder
     from recorder.pipeline import run_all
-    from recorder.player import PlaybackBlocked
+    from recorder.webplayer import PlaybackBlocked
     from recorder.state import Progress
 
     winutil.set_dpi_aware()

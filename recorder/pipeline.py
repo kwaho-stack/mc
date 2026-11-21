@@ -8,7 +8,7 @@ from pathlib import Path
 from . import winutil
 from .browser import Browser, Lesson
 from .files import move_recording
-from .player import KollusPlayer, PlaybackBlocked
+from .webplayer import PlaybackBlocked, WebPlayer
 from .state import Progress
 
 log = logging.getLogger(__name__)
@@ -18,11 +18,13 @@ class LessonError(Exception):
     pass
 
 
-def record_lesson(lesson: Lesson, br: Browser, player: KollusPlayer, rec, cfg) -> tuple[Path, str]:
+def record_lesson(lesson: Lesson, br: Browser, wp: WebPlayer, rec, cfg) -> tuple[Path, str]:
     pcfg, rcfg = cfg.get("player", {}), cfg.get("recorder", {})
     before = br.pages()
+    br.take_events()  # 이전 알림 기록 비우기
     recording = False
     ok = False
+    page = None
     try:
         if rcfg.get("start_before_click", False):
             rec.start()
@@ -31,23 +33,24 @@ def record_lesson(lesson: Lesson, br: Browser, player: KollusPlayer, rec, cfg) -
         log.info("'%s' 클릭", lesson.button)
         br.click(lesson)
 
-        win = player.wait_appear(float(pcfg.get("appear_timeout_sec", 90)))
-        if not win:
-            raise LessonError(
-                "재생창이 뜨지 않았습니다. 크롬에서 'Kollus 열기' 확인창이 떴다면 "
-                "'항상 허용'에 체크하고 열기를 눌러 주세요.")
+        page = wp.wait_open(before, br.list_url)
+        if page is None:
+            raise LessonError("재생 창이 열리지 않았습니다. (크롬 팝업 차단 여부를 확인해 주세요)")
 
-        player.make_fullscreen()  # 기본: F11
+        wp.make_fullscreen(page)      # 기본: F11 전체화면
         winutil.park_cursor()
 
         if not recording:
             rec.start()
             recording = True
 
-        outcome = player.wait_finish(float(pcfg.get("max_minutes_per_lesson", 240)) * 60)
-        log.info("차시 종료 감지: %s", {"closed": "재생창 닫힘", "end": "종료 알림",
-                                    "timeout": "최대 시간 초과"}.get(outcome, outcome))
-        time.sleep(float(rcfg.get("tail_sec", 2)))
+        wp.click_start(page)          # [시작] 버튼
+        winutil.park_cursor()
+
+        outcome = wp.wait_finish(page, float(pcfg.get("max_minutes_per_lesson", 240)) * 60)
+        log.info("차시 종료 감지: %s", {"end": "완료 알림", "closed": "재생 창 닫힘",
+                                    "ended": "영상 끝", "timeout": "최대 시간 초과"}.get(outcome, outcome))
+        br.wait(int(float(rcfg.get("tail_sec", 2)) * 1000))
         path = rec.stop()
         recording = False
         ok = True
@@ -57,12 +60,12 @@ def record_lesson(lesson: Lesson, br: Browser, player: KollusPlayer, rec, cfg) -
             path = rec.abort()
             if path and path.exists() and not ok:
                 log.info("중단된 녹화 파일: %s", path)
-        player.close()
+        wp.close(page)
         br.close_new_pages(before)
 
 
 def run_all(targets: list[Lesson], br: Browser, rec, cfg, progress: Progress) -> dict:
-    player = KollusPlayer(cfg.get("player", {}))
+    wp = WebPlayer(br, cfg.get("player", {}))
     out_dir = cfg.path(cfg.get("output_dir", "./recordings"))
     gap = float(cfg.get("between_lessons_sec", 5))
     result = {"done": [], "failed": []}
@@ -84,7 +87,7 @@ def run_all(targets: list[Lesson], br: Browser, rec, cfg, progress: Progress) ->
                 time.sleep(5)
                 continue
             try:
-                path, outcome = record_lesson(lesson, br, player, rec, cfg)
+                path, outcome = record_lesson(lesson, br, wp, rec, cfg)
                 dst = move_recording(path, out_dir, target.number, name)
                 progress.mark(target.key, "done", file=str(dst), outcome=outcome)
                 log.info("저장: %s", dst)
