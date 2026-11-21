@@ -183,6 +183,32 @@ def park_cursor() -> None:
     mouse_move(w - 1, h - 1)
 
 
+def minimize_console() -> int | None:
+    """이 프로그램의 명령 창(검은 창)을 최소화하고 그 창 번호를 돌려준다.
+    Windows 11 의 '터미널' 창도 처리하려고, 방금 Enter 를 누른 맨 앞 창을 대상으로 한다."""
+    hwnd = win32gui.GetForegroundWindow()
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(hwnd)
+        if proc_name(pid).lower() in ("chrome.exe", "msedge.exe", "obs64.exe", "explorer.exe"):
+            hwnd = 0
+    except Exception:
+        hwnd = 0
+    if not hwnd:
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+    if hwnd:
+        win32gui.ShowWindow(hwnd, win32con.SW_MINIMIZE)
+        time.sleep(0.5)
+    return hwnd or None
+
+
+def restore_window(hwnd: int | None) -> None:
+    if hwnd:
+        try:
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        except Exception:
+            pass
+
+
 def kill_pids(pids: set[int]) -> None:
     for pid in pids:
         try:

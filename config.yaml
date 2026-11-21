@@ -109,5 +109,8 @@ recorder:
     # 캡처 도구가 녹화를 자동 저장하는 폴더 (비우면 %USERPROFILE%\Videos\Screen Recordings)
     save_dir: ""
 
+# 녹화를 시작하면 명령 창(검은 창)을 자동으로 내리고, 끝나면 다시 올림
+minimize_console: true
+
 # 차시와 차시 사이 쉬는 시간(초)
 between_lessons_sec: 5

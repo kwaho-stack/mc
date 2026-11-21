@@ -197,6 +197,9 @@ def main() -> int:
             return 1
 
         winutil.keep_awake(True)
+        console = None
+        if cfg.get("minimize_console", True):
+            console = winutil.minimize_console()   # 녹화 화면에 명령 창이 가리지 않게
         try:
             result = run_all(targets, br, rec, cfg, progress)
         except PlaybackBlocked as e:
@@ -208,6 +211,7 @@ def main() -> int:
             return 130
         finally:
             winutil.keep_awake(False)
+            winutil.restore_window(console)
 
     log.info("━━━ 끝: 성공 %d개, 실패 %d개 ━━━", len(result["done"]), len(result["failed"]))
     for t in result["failed"]:
