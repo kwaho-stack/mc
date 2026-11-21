@@ -204,6 +204,7 @@ class Browser:
                 no_viewport=True,
                 ignore_default_args=["--enable-automation"],
                 args=["--start-maximized"],
+                chromium_sandbox=True,   # '--no-sandbox 사용 중' 경고 줄 없애기
             )
             self.page = self.context.pages[0] if self.context.pages else None
         if self.page is None:
@@ -250,9 +251,39 @@ class Browser:
 
     # ── 페이지 읽기 ──────────────────────────────────────────
     def open_list(self) -> None:
+        """처음 한 번만 주소로 접속 (이후로는 주소로 다시 접속하면 빈 강의실이 뜸)."""
         self.page.bring_to_front()
         self.page.goto(self.list_url, wait_until="domcontentloaded")
         self._settle()
+
+    def _list_visible(self, timeout: float = 5) -> bool:
+        deadline = time.time() + timeout
+        while True:
+            heads, lessons = self._scan_visible()
+            if heads or lessons:
+                return True
+            if time.time() >= deadline:
+                return False
+            self.wait(500)
+
+    def back_to_list(self) -> bool:
+        """사용자가 열어 둔 차시 목록 화면으로 돌아온다. 주소로 다시 접속하지 않는다.
+        (이 사이트는 강좌를 눌러서 들어가야 목록이 나오고, 주소로 바로 열면 빈 강의실이 뜸)"""
+        self.page.bring_to_front()
+        if self._list_visible(3):
+            return True
+        for _ in range(3):  # 상세페이지 등으로 넘어갔다면 뒤로 가기
+            log.info("목록 화면으로 돌아가기 (뒤로): %s", self.page.url)
+            try:
+                if self.page.go_back(wait_until="domcontentloaded", timeout=15000) is None:
+                    break
+            except Exception:
+                break
+            self._settle()
+            if self._list_visible(5):
+                return True
+        log.warning("차시 목록 화면으로 돌아오지 못했습니다 (현재: %s)", self.page.url)
+        return False
 
     def _settle(self) -> None:
         try:
@@ -334,7 +365,7 @@ class Browser:
     def collect(self, reload: bool = True) -> list[Lesson]:
         """모든 주차를 차례로 펼쳐 전체 차시 목록을 만든다."""
         if reload:
-            self.open_list()
+            self.back_to_list()
         heads, visible = self._scan_visible()
         if not heads:
             result = visible
@@ -427,18 +458,18 @@ class Browser:
         return pages[-1] if pages else self.context.new_page()
 
     def locate(self, target: Lesson) -> Lesson | None:
-        """목록을 새로 열고 target 차시가 있는 주차를 펼쳐서 클릭 가능한 차시를 돌려준다."""
-        self.open_list()
+        """차시 목록 화면에서 target 차시가 있는 주차를 펼쳐서 클릭 가능한 차시를 돌려준다."""
+        self.back_to_list()
         heads, visible = self._scan_visible()
         cands = visible
         if target.section:
             head = next((h for h in heads if h["title"] == target.section), None)
             if head:
                 cands = self._expand(head)
-        same = [l for l in cands if l.section == target.section and l.title == target.title]
-        # 같은 제목이 여러 개면 key 의 #번호로 구분
-        n = int(target.key.rsplit("#", 1)[1]) if "#" in target.key else 1
-        return same[n - 1] if len(same) >= n else None
+        found = self._match(cands, target)  # 같은 제목이 여러 개면 key 의 #번호로 구분
+        if found:
+            found.key = target.key
+        return found
 
     def click(self, lesson: Lesson, method: str = "normal", attempt: int = 1) -> None:
         """학습하기 누르기.
@@ -447,10 +478,12 @@ class Browser:
         mouse  : 실제 마우스를 버튼 위치로 옮겨 클릭 (사람이 누르는 것과 같음)
         """
         self.page.bring_to_front()
-        loc = lesson.frame.locator(f'[data-rec-idx="{lesson.idx}"]').first
-        loc.scroll_into_view_if_needed(timeout=5000)
         # 페이지가 완전히 준비된 뒤 누른다. 다시 누를수록 더 오래 기다림 (3초 → 6초 → 9초)
         self.wait(int(float(self.lcfg.get("click_delay_sec", 3)) * attempt * 1000))
+        # 기다리는 동안 목록이 다시 그려졌을 수 있으니 누르기 직전에 버튼을 다시 찾는다
+        lesson = self._refind(lesson)
+        loc = lesson.frame.locator(f'[data-rec-idx="{lesson.idx}"]').first
+        loc.scroll_into_view_if_needed(timeout=5000)
         log.info("버튼 코드: %s", re.sub(r"\s+", " ", lesson.html)[:300])
         if method == "js":
             loc.evaluate("el => el.click()")
@@ -458,6 +491,21 @@ class Browser:
             self._os_click(loc)
         else:
             loc.click(timeout=10000)
+
+    def _match(self, lessons: list[Lesson], target: Lesson) -> Lesson | None:
+        same = [l for l in lessons if l.section == target.section and l.title == target.title]
+        n = int(target.key.rsplit("#", 1)[1]) if "#" in target.key else 1
+        return same[n - 1] if len(same) >= n else None
+
+    def _refind(self, lesson: Lesson) -> Lesson:
+        for _ in range(10):
+            _, visible = self._scan_visible()
+            found = self._match(visible, lesson)
+            if found:
+                found.key = lesson.key
+                return found
+            self.wait(500)
+        raise RuntimeError(f"누르기 직전에 '{lesson.title}' 버튼이 사라졌습니다")
 
     def _os_click(self, loc) -> None:
         from . import winutil
