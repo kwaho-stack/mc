@@ -21,6 +21,12 @@ lessons:
   skip_completed: true
   # 시작할 때 차시 목록을 보여주고 건너뛰기/범위를 확인할지
   ask_on_start: true
+  # 학습하기를 누르기 전에 기다리는 시간(초). 페이지가 다 준비되기 전에 누르면 상세페이지로 넘어갈 수 있음
+  # 실패해서 다시 누를 때는 2배, 3배로 늘어남
+  click_delay_sec: 3
+  # 학습하기를 누르는 방법. 재생 창이 안 열리면 다음 방법으로 다시 시도
+  #   normal = 자동화 클릭, js = 페이지 안에서 클릭, mouse = 실제 마우스 클릭
+  click_methods: ["normal", "js", "mouse"]
   # 차시마다 있는 재생 버튼 글자 (여러 개 가능)
   study_button_texts: ["학습하기", "복습하기", "다시보기"]
   # 주차 제목 찾기 (정규식). 접힌 주차는 프로그램이 하나씩 눌러서 펼침
@@ -46,7 +52,9 @@ lessons:
 player:
   # 학습하기를 누르면 크롬 새 창(재생 창)이 열립니다.
   # 재생 창이 열릴 때까지 기다리는 최대 시간(초)
-  appear_timeout_sec: 30
+  appear_timeout_sec: 20
+  # 주소에 이 글자가 있으면 재생 화면으로 봄 (예: edu.inzeum.com/bookMark/bookMarkInit)
+  player_url_patterns: ["bookMark"]
   # 재생 창이 열린 뒤 화면 크기
   #   f11      : F11 과 같은 크롬 전체화면 (기본)
   #   maximize : 창 최대화만

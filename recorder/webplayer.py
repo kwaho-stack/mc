@@ -71,6 +71,25 @@ class WebPlayer:
                 return main
         return None
 
+    def is_player(self, page, timeout: float = 8) -> bool:
+        """영상 요소나 [시작] 버튼이 있거나, 주소가 재생 페이지 주소면 재생 화면으로 본다."""
+        pats = self.cfg.get("player_url_patterns") or []
+        texts = self.cfg.get("start_button_texts") or ["시작"]
+        deadline = time.time() + timeout
+        while time.time() < deadline and not page.is_closed():
+            if any(p in page.url for p in pats):
+                return True
+            if self._videos(page):
+                return True
+            for frame in page.frames:
+                try:
+                    if frame.evaluate(START_JS, texts):
+                        return True
+                except Exception:
+                    pass
+            self.br.wait(700)
+        return False
+
     # ── 전체화면 ─────────────────────────────────────────────
     def _window_state(self, page, state: str) -> bool:
         try:

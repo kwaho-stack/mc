@@ -30,12 +30,26 @@ def record_lesson(lesson: Lesson, br: Browser, wp: WebPlayer, rec, cfg) -> tuple
             rec.start()
             recording = True
 
-        log.info("'%s' 클릭", lesson.button)
-        br.click(lesson)
-
-        page = wp.wait_open(before, br.list_url)
+        methods = cfg.get("lessons", {}).get("click_methods") or ["normal", "js", "mouse"]
+        page = None
+        for n, method in enumerate(methods):
+            if n:
+                # 앞의 방법이 실패 → 목록으로 돌아가 같은 차시를 다시 찾는다
+                br.close_new_pages(before)
+                lesson = br.locate(lesson) or lesson
+                before = br.pages()
+            log.info("'%s' 클릭 (방법: %s)", lesson.button, method)
+            br.click(lesson, method, attempt=n + 1)
+            page = wp.wait_open(before, br.list_url)
+            if page is None:
+                log.warning("재생 창이 열리지 않았습니다")
+                continue
+            if not wp.same_tab or wp.is_player(page):
+                break
+            log.warning("재생 화면이 아닌 페이지로 이동했습니다: %s → 다른 방법으로 다시 누릅니다", page.url)
+            page = None
         if page is None:
-            raise LessonError("재생 창이 열리지 않았습니다. (크롬 팝업 차단 여부를 확인해 주세요)")
+            raise LessonError("학습하기를 눌러도 재생 창이 열리지 않았습니다. logs 폴더의 로그를 보내 주세요.")
 
         wp.make_fullscreen(page)      # 기본: F11 전체화면
         winutil.park_cursor()

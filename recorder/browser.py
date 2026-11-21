@@ -132,11 +132,15 @@ SCAN_JS = r"""
 
   const items = cands.map((el, i) => {
     const idx = base + i;
-    el.setAttribute('data-rec-idx', String(idx));
     const row = rowOf(el);
+    // 실제로 눌리는 요소(a/button 등)를 누른다. 글자만 있는 안쪽 span 이 아니라.
+    const clk = el.closest('a, button, input, [onclick], [role=button]');
+    const target = clk && row.contains(clk) ? clk : el;
+    target.setAttribute('data-rec-idx', String(idx));
     return {
       idx, sec: secOf(el), button: textOf(el), title: titleOf(row, el),
       rowText: norm(blockParts(row).join(' ')), tokens: tokensOf(row, el),
+      html: target.outerHTML.slice(0, 400),
     };
   });
   return { heads: headInfo, items };
@@ -159,6 +163,7 @@ class Lesson:
     tokens: list = field(default_factory=list, repr=False)
     frame: object = field(default=None, repr=False)
     idx: int = -1
+    html: str = field(default="", repr=False)   # 버튼 코드 (진단용)
 
     @property
     def full_title(self) -> str:
@@ -287,6 +292,7 @@ class Browser:
                     tokens=it["tokens"],
                     frame=frame,
                     idx=it["idx"],
+                    html=it.get("html", ""),
                 ))
         return heads, lessons
 
@@ -434,11 +440,42 @@ class Browser:
         n = int(target.key.rsplit("#", 1)[1]) if "#" in target.key else 1
         return same[n - 1] if len(same) >= n else None
 
-    def click(self, lesson: Lesson) -> None:
+    def click(self, lesson: Lesson, method: str = "normal", attempt: int = 1) -> None:
+        """학습하기 누르기.
+        normal : 브라우저 자동화 클릭
+        js     : 페이지 안에서 버튼.click() 실행
+        mouse  : 실제 마우스를 버튼 위치로 옮겨 클릭 (사람이 누르는 것과 같음)
+        """
         self.page.bring_to_front()
-        loc = lesson.frame.locator(f'[data-rec-idx="{lesson.idx}"]')
+        loc = lesson.frame.locator(f'[data-rec-idx="{lesson.idx}"]').first
         loc.scroll_into_view_if_needed(timeout=5000)
-        loc.click(timeout=10000)
+        # 페이지가 완전히 준비된 뒤 누른다. 다시 누를수록 더 오래 기다림 (3초 → 6초 → 9초)
+        self.wait(int(float(self.lcfg.get("click_delay_sec", 3)) * attempt * 1000))
+        log.info("버튼 코드: %s", re.sub(r"\s+", " ", lesson.html)[:300])
+        if method == "js":
+            loc.evaluate("el => el.click()")
+        elif method == "mouse":
+            self._os_click(loc)
+        else:
+            loc.click(timeout=10000)
+
+    def _os_click(self, loc) -> None:
+        from . import winutil
+
+        box = loc.bounding_box()
+        if not box:
+            raise RuntimeError("버튼 위치를 알 수 없습니다")
+        # iframe 안이면 bounding_box 가 이미 페이지 기준 좌표임
+        info = self.page.evaluate(
+            "() => ({sx: screenX, sy: screenY, ow: outerWidth, oh: outerHeight,"
+            " iw: innerWidth, ih: innerHeight, dpr: devicePixelRatio})")
+        border = max(0, (info["ow"] - info["iw"]) / 2)
+        top = info["oh"] - info["ih"] - border          # 탭·주소창 높이
+        x = (info["sx"] + border + box["x"] + box["width"] / 2) * info["dpr"]
+        y = (info["sy"] + top + box["y"] + box["height"] / 2) * info["dpr"]
+        log.info("마우스로 클릭: (%d, %d)", x, y)
+        winutil.mouse_click(int(x), int(y))
+        winutil.park_cursor()
 
     # ── 정리 ────────────────────────────────────────────────
     def pages(self) -> list:
